@@ -1,7 +1,7 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { Category } from '../types';
+import type { Category } from '../types';
 
 export default function NewTicketPage() {
   const navigate = useNavigate();

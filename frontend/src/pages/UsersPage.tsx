@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/axios';
-import { User, UserRole } from '../types';
+import type { User, UserRole } from '../types';
 
 const roleLabel: Record<UserRole, string> = {
   user: 'Usuário',
@@ -68,12 +68,12 @@ export default function UsersPage() {
                     onChange={(e) => handleRoleChange(u.id, e.target.value as UserRole)}
                     className="role-select"
                   >
-                    <option value="user">Usuário</option>
-                    <option value="technician">Técnico</option>
-                    <option value="admin">Admin</option>
+                    {(Object.entries(roleLabel) as [UserRole, string][]).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
                   </select>
                 </td>
-                <td>{new Date((u as any).created_at).toLocaleDateString('pt-BR')}</td>
+                <td>{new Date(u.created_at).toLocaleDateString('pt-BR')}</td>
                 <td>
                   <button className="btn btn-sm btn-danger" onClick={() => handleDelete(u.id)}>
                     Excluir

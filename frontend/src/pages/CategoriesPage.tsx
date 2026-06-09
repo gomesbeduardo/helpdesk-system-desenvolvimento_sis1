@@ -1,6 +1,6 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import api from '../api/axios';
-import { Category } from '../types';
+import type { Category } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function CategoriesPage() {

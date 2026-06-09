@@ -20,7 +20,16 @@
       "Bash(psql -U gomes -d postgres -c '\\\\l')",
       "Bash(psql *)",
       "Bash(pg_lsclusters)",
-      "Bash(sudo service postgresql status)"
+      "Bash(sudo service postgresql status)",
+      "Bash(git branch *)",
+      "Bash(git commit -m ' *)",
+      "Read(//home/gomes/.local/bin/**)",
+      "Read(//tmp/**)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(curl -s -X POST http://localhost:3001/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@helpdesk.com\",\"password\":\"admin123\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:5173)"
     ]
   }
 }

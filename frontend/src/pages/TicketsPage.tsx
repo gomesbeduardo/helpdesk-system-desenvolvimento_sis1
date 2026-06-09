@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
-import { Ticket, TicketStatus, Category } from '../types';
+import type { Ticket, TicketStatus, Category } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 const statusLabel: Record<TicketStatus, string> = {

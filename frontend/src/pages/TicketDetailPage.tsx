@@ -1,7 +1,7 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
-import { Ticket, Comment, HistoryEntry, TicketStatus } from '../types';
+import type { Ticket, Comment, HistoryEntry, TicketStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
 const statusLabel: Record<TicketStatus, string> = {
