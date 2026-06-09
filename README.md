@@ -1,4 +1,4 @@
-# 🎫 Help Desk — Sistema de Chamados
+# Help Desk — Sistema de Chamados
 
 Aplicação web fullstack para gerenciamento de chamados de suporte técnico. Permite que usuários abram chamados, técnicos os atendam e administradores gerenciem tudo com controle total de acesso por perfil.
 
