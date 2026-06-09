@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import type { Ticket, Comment, HistoryEntry, TicketStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import EditTicketModal from '../components/EditTicketModal';
 
 const statusLabel: Record<TicketStatus, string> = {
   open: 'Aberto',
@@ -27,15 +28,16 @@ export default function TicketDetailPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [ticket, setTicket]       = useState<Ticket | null>(null);
+  const [comments, setComments]   = useState<Comment[]>([]);
+  const [history, setHistory]     = useState<HistoryEntry[]>([]);
   const [newComment, setNewComment] = useState('');
   const [newStatus, setNewStatus] = useState<TicketStatus>('open');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]     = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [tab, setTab] = useState<'comments' | 'history'>('comments');
+  const [error, setError]         = useState('');
+  const [tab, setTab]             = useState<'comments' | 'history'>('comments');
+  const [showEdit, setShowEdit]   = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -57,7 +59,7 @@ export default function TicketDetailPage() {
     setSubmitting(true);
     try {
       const res = await api.post(`/tickets/${id}/comments`, { message: newComment });
-      setComments([...comments, res.data]);
+      setComments(prev => [...prev, res.data]);
       setNewComment('');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Erro ao comentar.');
@@ -70,7 +72,7 @@ export default function TicketDetailPage() {
     if (!ticket || newStatus === ticket.status) return;
     try {
       const res = await api.patch(`/tickets/${id}/status`, { status: newStatus });
-      setTicket({ ...ticket, status: res.data.status });
+      setTicket(prev => prev ? { ...prev, status: res.data.status } : prev);
       const h = await api.get(`/tickets/${id}/history`);
       setHistory(h.data);
     } catch (err: any) {
@@ -78,30 +80,45 @@ export default function TicketDetailPage() {
     }
   }
 
-  if (loading) return <div className="loading">Carregando...</div>;
+  function handleSaved(updated: Ticket) {
+    setTicket(updated);
+    setNewStatus(updated.status);
+    // Refresh history in case status changed via admin edit
+    api.get(`/tickets/${id}/history`).then(r => setHistory(r.data));
+  }
+
+  if (loading) return <div className="loading">Carregando</div>;
   if (!ticket) return null;
 
   const canChangeStatus = user?.role === 'technician' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
 
   return (
     <div className="page">
-      <button className="btn btn-sm btn-outline mb-1" onClick={() => navigate('/tickets')}>← Voltar</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
+        <button className="btn btn-sm btn-outline" onClick={() => navigate('/tickets')}>← Voltar</button>
+        {isAdmin && (
+          <button className="btn btn-sm btn-outline" onClick={() => setShowEdit(true)}>
+            ✏️ Editar Chamado
+          </button>
+        )}
+      </div>
 
       <div className="ticket-detail-header">
         <div>
           <h1>{ticket.title}</h1>
           <div className="ticket-meta-row">
             <span className={`badge ${statusClass[ticket.status]}`}>{statusLabel[ticket.status]}</span>
+            <span className={`priority-tag priority-${ticket.priority}`}>{priorityLabel[ticket.priority]}</span>
             <span className="meta-item">📂 {ticket.category_name}</span>
-            <span className="meta-item">⚡ {priorityLabel[ticket.priority]}</span>
             <span className="meta-item">👤 {ticket.user_name}</span>
-            <span className="meta-item">📅 {new Date(ticket.created_at).toLocaleString('pt-BR')}</span>
+            <span className="meta-item">📅 {new Date(ticket.created_at).toLocaleDateString('pt-BR')}</span>
           </div>
         </div>
 
-        {canChangeStatus && (
+        {canChangeStatus && !isAdmin && (
           <div className="status-changer">
-            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value as TicketStatus)}>
+            <select value={newStatus} onChange={e => setNewStatus(e.target.value as TicketStatus)}>
               <option value="open">Aberto</option>
               <option value="in_progress">Em Atendimento</option>
               <option value="resolved">Resolvido</option>
@@ -127,18 +144,18 @@ export default function TicketDetailPage() {
 
       <div className="tabs">
         <button className={`tab-btn ${tab === 'comments' ? 'active' : ''}`} onClick={() => setTab('comments')}>
-          💬 Comentários ({comments.length})
+          Comentários ({comments.length})
         </button>
         <button className={`tab-btn ${tab === 'history' ? 'active' : ''}`} onClick={() => setTab('history')}>
-          📋 Histórico ({history.length})
+          Histórico ({history.length})
         </button>
       </div>
 
       {tab === 'comments' && (
         <div className="comments-section">
           <div className="comments-list">
-            {comments.length === 0 && <p className="empty-text">Sem comentários ainda.</p>}
-            {comments.map((c) => (
+            {comments.length === 0 && <p className="empty-text">Nenhum comentário ainda.</p>}
+            {comments.map(c => (
               <div key={c.id} className={`comment ${c.user_id === user?.id ? 'comment-own' : ''}`}>
                 <div className="comment-header">
                   <strong>{c.user_name}</strong>
@@ -152,13 +169,12 @@ export default function TicketDetailPage() {
           <form onSubmit={handleComment} className="comment-form">
             <textarea
               value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Escreva um comentário..."
-              rows={3}
+              onChange={e => setNewComment(e.target.value)}
+              placeholder="Escreva um comentário…"
               required
             />
             <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Enviando...' : 'Comentar'}
+              {submitting ? 'Enviando…' : 'Comentar'}
             </button>
           </form>
         </div>
@@ -167,7 +183,7 @@ export default function TicketDetailPage() {
       {tab === 'history' && (
         <div className="history-section">
           {history.length === 0 && <p className="empty-text">Sem histórico.</p>}
-          {history.map((h) => (
+          {history.map(h => (
             <div key={h.id} className="history-entry">
               <span className="history-arrow">
                 {h.old_status ? `${statusLabel[h.old_status]} → ` : ''}
@@ -178,6 +194,14 @@ export default function TicketDetailPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {showEdit && ticket && (
+        <EditTicketModal
+          ticket={ticket}
+          onClose={() => setShowEdit(false)}
+          onSaved={handleSaved}
+        />
       )}
     </div>
   );

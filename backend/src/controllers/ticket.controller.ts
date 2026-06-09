@@ -132,19 +132,31 @@ export async function updateTicket(req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    const { title, description, priority, category_id } = req.body;
+    const { title, description, priority, category_id, status } = req.body;
+
+    const newTitle      = title       || ticket.title;
+    const newDesc       = description || ticket.description;
+    const newPriority   = priority    || ticket.priority;
+    const newCategoryId = category_id || ticket.category_id;
+
+    // Admin pode alterar status diretamente via PUT
+    const validStatuses: TicketStatus[] = ['open', 'in_progress', 'resolved', 'closed'];
+    const canUpdateStatus = user.role === 'admin' && status && validStatuses.includes(status);
+    const newStatus = canUpdateStatus ? status : ticket.status;
 
     const result = await pool.query(
-      `UPDATE tickets SET title=$1, description=$2, priority=$3, category_id=$4, updated_at=NOW()
-       WHERE id=$5 RETURNING *`,
-      [
-        title || ticket.title,
-        description || ticket.description,
-        priority || ticket.priority,
-        category_id || ticket.category_id,
-        id,
-      ]
+      `UPDATE tickets SET title=$1, description=$2, priority=$3, category_id=$4, status=$5, updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [newTitle, newDesc, newPriority, newCategoryId, newStatus, id]
     );
+
+    if (canUpdateStatus && status !== ticket.status) {
+      await pool.query(
+        `INSERT INTO ticket_status_history (id, ticket_id, old_status, new_status, changed_by)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [uuidv4(), id, ticket.status, status, user.id]
+      );
+    }
 
     res.json(result.rows[0]);
   } catch (err) {
