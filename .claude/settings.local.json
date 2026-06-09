@@ -29,7 +29,9 @@
       "Bash(curl -s http://localhost:3001/health)",
       "Bash(curl -s -X POST http://localhost:3001/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@helpdesk.com\",\"password\":\"admin123\"}')",
       "Bash(python3 -m json.tool)",
-      "Bash(curl -s http://localhost:5173)"
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(git add *)",
+      "Bash(git push *)"
     ]
   }
 }
