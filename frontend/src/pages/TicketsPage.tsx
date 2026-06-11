@@ -1,74 +1,72 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../api/axios';
-import type { Ticket, TicketStatus, Category } from '../types';
+import type { Ticket, Category } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-
-const statusLabel: Record<TicketStatus, string> = {
-  open: 'Aberto',
-  in_progress: 'Em Atendimento',
-  resolved: 'Resolvido',
-  closed: 'Fechado',
-};
-
-const statusClass: Record<TicketStatus, string> = {
-  open: 'badge-blue',
-  in_progress: 'badge-yellow',
-  resolved: 'badge-green',
-  closed: 'badge-gray',
-};
-
-const priorityLabel: Record<string, string> = {
-  low: 'Baixa',
-  medium: 'Média',
-  high: 'Alta',
-  urgent: 'Urgente',
-};
-
-const priorityClass: Record<string, string> = {
-  low: 'priority-low',
-  medium: 'priority-medium',
-  high: 'priority-high',
-  urgent: 'priority-urgent',
-};
+import { statusLabel, statusClass, priorityLabel, priorityClass } from '../constants/ticket';
 
 export default function TicketsPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => parseInt(searchParams.get('page') || '1'));
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [categories, setCategories] = useState<Category[]>([]);
 
   const [filters, setFilters] = useState({
-    status: '',
-    category_id: '',
-    search: '',
-    sort: '',
+    status:      searchParams.get('status') || '',
+    category_id: searchParams.get('category_id') || '',
+    search:      searchParams.get('search') || '',
+    sort:        searchParams.get('sort') || '',
   });
 
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    api.get('/categories').then((r) => setCategories(r.data));
+    api.get('/categories').catch(() => null).then((r) => {
+      if (r) setCategories(r.data);
+    });
   }, []);
 
   useEffect(() => {
     setLoading(true);
+    setError('');
     const params: Record<string, string | number> = { page, limit: 10 };
-    if (filters.status) params['status'] = filters.status;
+    if (filters.status)      params['status']      = filters.status;
     if (filters.category_id) params['category_id'] = filters.category_id;
-    if (filters.search) params['search'] = filters.search;
-    if (filters.sort) params['sort'] = filters.sort;
+    if (filters.search)      params['search']      = filters.search;
+    if (filters.sort)        params['sort']        = filters.sort;
+
+    const next = new URLSearchParams();
+    if (page > 1)            next.set('page', String(page));
+    if (filters.status)      next.set('status', filters.status);
+    if (filters.category_id) next.set('category_id', filters.category_id);
+    if (filters.search)      next.set('search', filters.search);
+    if (filters.sort)        next.set('sort', filters.sort);
+    setSearchParams(next, { replace: true });
 
     api.get('/tickets', { params })
       .then((r) => {
         setTickets(r.data.tickets);
         setTotal(r.data.total);
       })
+      .catch(() => setError('Erro ao carregar chamados.'))
       .finally(() => setLoading(false));
   }, [page, filters]);
 
   function handleFilter(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    setFilters({ ...filters, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'search') {
+      if (searchDebounce.current) clearTimeout(searchDebounce.current);
+      searchDebounce.current = setTimeout(() => {
+        setFilters(prev => ({ ...prev, search: value }));
+        setPage(1);
+      }, 300);
+      return;
+    }
+    setFilters(prev => ({ ...prev, [name]: value }));
     setPage(1);
   }
 
@@ -85,7 +83,7 @@ export default function TicketsPage() {
         <input
           name="search"
           placeholder="Buscar por título ou descrição..."
-          value={filters.search}
+          defaultValue={filters.search}
           onChange={handleFilter}
           className="search-input"
         />
@@ -108,6 +106,8 @@ export default function TicketsPage() {
         </select>
       </div>
 
+      {error && <div className="alert alert-error">{error}</div>}
+
       {loading ? (
         <div className="loading">Carregando...</div>
       ) : tickets.length === 0 ? (
@@ -119,7 +119,7 @@ export default function TicketsPage() {
         <>
           <div className="tickets-list">
             {tickets.map((t) => (
-              <Link to={`/tickets/${t.id}`} key={t.id} className="ticket-card">
+              <Link to={`/tickets/${t.id}`} key={t.id} className={`ticket-card ticket-card--${t.status}`}>
                 <div className="ticket-card-header">
                   <h3>{t.title}</h3>
                   <span className={`badge ${statusClass[t.status]}`}>{statusLabel[t.status]}</span>
@@ -132,7 +132,7 @@ export default function TicketsPage() {
                   {user?.role !== 'user' && <span className="user-tag">👤 {t.user_name}</span>}
                   <span className="date-tag">{new Date(t.created_at).toLocaleDateString('pt-BR')}</span>
                 </div>
-                <p className="ticket-card-desc">{t.description.substring(0, 120)}{t.description.length > 120 ? '...' : ''}</p>
+                <p className="ticket-card-desc">{t.description}</p>
               </Link>
             ))}
           </div>

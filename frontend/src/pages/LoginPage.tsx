@@ -1,14 +1,17 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { AxiosError } from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const registered = searchParams.get('registered') === '1';
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -17,8 +20,9 @@ export default function LoginPage() {
     try {
       await login(email, password);
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao fazer login.');
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao fazer login.');
     } finally {
       setLoading(false);
     }
@@ -27,8 +31,12 @@ export default function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>🎫 Help Desk</h1>
-        <h2>Entrar</h2>
+        <div className="auth-logo">
+          <div className="auth-logo-icon">🎫</div>
+          <h1>Help Desk</h1>
+        </div>
+        <h2>Faça login para continuar</h2>
+        {registered && <div className="alert alert-success">Conta criada! Faça login para continuar.</div>}
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">

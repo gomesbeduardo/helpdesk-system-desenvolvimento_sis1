@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  getTickets, getTicketById, createTicket, updateTicket, deleteTicket, updateTicketStatus,
+  getTickets, getTicketStats, getTicketById, createTicket, updateTicket, deleteTicket, updateTicketStatus,
 } from '../controllers/ticket.controller';
 import { getComments, createComment } from '../controllers/comment.controller';
 import { getHistory } from '../controllers/history.controller';
@@ -9,6 +9,7 @@ import { validateFields } from '../middlewares/validate.middleware';
 
 const router = Router();
 
+router.get('/stats', authenticate, getTicketStats);
 router.get('/', authenticate, getTickets);
 router.post('/', authenticate, validateFields(['title', 'description', 'priority', 'category_id']), createTicket);
 router.get('/:id', authenticate, getTicketById);

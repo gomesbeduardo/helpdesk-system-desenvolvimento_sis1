@@ -17,21 +17,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      api.get('/tickets', { params: { status: 'open', limit: 1 } }),
-      api.get('/tickets', { params: { status: 'in_progress', limit: 1 } }),
-      api.get('/tickets', { params: { status: 'resolved', limit: 1 } }),
-      api.get('/tickets', { params: { status: 'closed', limit: 1 } }),
-      api.get('/tickets', { params: { limit: 1 } }),
-    ]).then(([open, in_progress, resolved, closed, all]) => {
-      setStats({
-        open: open.data.total,
-        in_progress: in_progress.data.total,
-        resolved: resolved.data.total,
-        closed: closed.data.total,
-        total: all.data.total,
-      });
-    }).finally(() => setLoading(false));
+    api.get('/tickets/stats')
+      .then((r) => setStats(r.data))
+      .finally(() => setLoading(false));
   }, []);
 
   return (

@@ -6,7 +6,7 @@ export async function getHistory(req: Request, res: Response, next: NextFunction
     const user = req.user!;
     const { id: ticket_id } = req.params;
 
-    const ticket = await pool.query('SELECT * FROM tickets WHERE id=$1', [ticket_id]);
+    const ticket = await pool.query('SELECT id, user_id FROM tickets WHERE id=$1', [ticket_id]);
     if (ticket.rows.length === 0) {
       res.status(404).json({ error: 'Chamado não encontrado.' });
       return;

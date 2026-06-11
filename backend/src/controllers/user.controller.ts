@@ -15,7 +15,9 @@ export async function createUser(req: Request, res: Response, next: NextFunction
 
     const hash = await bcrypt.hash(password, 10);
     const id = uuidv4();
-    const userRole = role || 'user';
+    // Role só pode ser definido por admin autenticado via PUT /users/:id
+    const isAdmin = req.user?.role === 'admin';
+    const userRole = (isAdmin && role) ? role : 'user';
 
     const result = await pool.query(
       `INSERT INTO users (id, name, email, password, role) VALUES ($1,$2,$3,$4,$5)
@@ -76,8 +78,16 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
       return;
     }
 
-    const newName = name || current.rows[0].name;
-    const newEmail = email || current.rows[0].email;
+    const newName = name !== undefined ? name : current.rows[0].name;
+    const newEmail = email !== undefined ? email : current.rows[0].email;
+
+    if (email && email !== current.rows[0].email) {
+      const dup = await pool.query('SELECT id FROM users WHERE email = $1 AND id != $2', [email, id]);
+      if (dup.rows.length > 0) {
+        res.status(409).json({ error: 'E-mail já cadastrado por outro usuário.' });
+        return;
+      }
+    }
     const newRole = (requestUser.role === 'admin' && role) ? role : current.rows[0].role;
     const newPassword = password ? await bcrypt.hash(password, 10) : current.rows[0].password;
 
@@ -96,6 +106,10 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
 export async function deleteUser(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const { id } = req.params;
+    if (req.user!.id === id) {
+      res.status(400).json({ error: 'Não é possível excluir a própria conta.' });
+      return;
+    }
     const result = await pool.query('DELETE FROM users WHERE id=$1 RETURNING id', [id]);
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Usuário não encontrado.' });

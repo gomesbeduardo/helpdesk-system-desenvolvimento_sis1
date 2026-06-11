@@ -59,6 +59,36 @@ export async function getTickets(req: Request, res: Response, next: NextFunction
   }
 }
 
+export async function getTicketStats(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const user = req.user!;
+    const params: string[] = [];
+    const where = user.role === 'user' ? 'WHERE user_id = $1' : '';
+    if (user.role === 'user') params.push(user.id);
+
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'open')        AS open,
+        COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress,
+        COUNT(*) FILTER (WHERE status = 'resolved')    AS resolved,
+        COUNT(*) FILTER (WHERE status = 'closed')      AS closed,
+        COUNT(*)                                        AS total
+      FROM tickets ${where}
+    `, params);
+
+    const row = result.rows[0];
+    res.json({
+      open:        parseInt(row.open),
+      in_progress: parseInt(row.in_progress),
+      resolved:    parseInt(row.resolved),
+      closed:      parseInt(row.closed),
+      total:       parseInt(row.total),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function getTicketById(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const user = req.user!;
@@ -92,26 +122,33 @@ export async function getTicketById(req: Request, res: Response, next: NextFunct
 }
 
 export async function createTicket(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const client = await pool.connect();
   try {
     const user = req.user!;
     const { title, description, priority, category_id } = req.body;
     const id = uuidv4();
 
-    const result = await pool.query(
+    await client.query('BEGIN');
+
+    const result = await client.query(
       `INSERT INTO tickets (id, title, description, status, priority, user_id, category_id)
        VALUES ($1,$2,$3,'open',$4,$5,$6) RETURNING *`,
       [id, title, description, priority, user.id, category_id]
     );
 
-    await pool.query(
+    await client.query(
       `INSERT INTO ticket_status_history (id, ticket_id, old_status, new_status, changed_by)
        VALUES ($1,$2,NULL,'open',$3)`,
       [uuidv4(), id, user.id]
     );
 
+    await client.query('COMMIT');
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
   }
 }
 
@@ -120,7 +157,10 @@ export async function updateTicket(req: Request, res: Response, next: NextFuncti
     const user = req.user!;
     const { id } = req.params;
 
-    const current = await pool.query('SELECT * FROM tickets WHERE id=$1', [id]);
+    const current = await pool.query(
+      'SELECT id, title, description, status, priority, user_id, category_id FROM tickets WHERE id=$1',
+      [id]
+    );
     if (current.rows.length === 0) {
       res.status(404).json({ error: 'Chamado não encontrado.' });
       return;
@@ -134,31 +174,41 @@ export async function updateTicket(req: Request, res: Response, next: NextFuncti
 
     const { title, description, priority, category_id, status } = req.body;
 
-    const newTitle      = title       || ticket.title;
-    const newDesc       = description || ticket.description;
-    const newPriority   = priority    || ticket.priority;
-    const newCategoryId = category_id || ticket.category_id;
+    const newTitle      = title       !== undefined ? title       : ticket.title;
+    const newDesc       = description !== undefined ? description : ticket.description;
+    const newPriority   = priority    !== undefined ? priority    : ticket.priority;
+    const newCategoryId = category_id !== undefined ? category_id : ticket.category_id;
 
-    // Admin pode alterar status diretamente via PUT
     const validStatuses: TicketStatus[] = ['open', 'in_progress', 'resolved', 'closed'];
     const canUpdateStatus = user.role === 'admin' && status && validStatuses.includes(status);
     const newStatus = canUpdateStatus ? status : ticket.status;
 
-    const result = await pool.query(
-      `UPDATE tickets SET title=$1, description=$2, priority=$3, category_id=$4, status=$5, updated_at=NOW()
-       WHERE id=$6 RETURNING *`,
-      [newTitle, newDesc, newPriority, newCategoryId, newStatus, id]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    if (canUpdateStatus && status !== ticket.status) {
-      await pool.query(
-        `INSERT INTO ticket_status_history (id, ticket_id, old_status, new_status, changed_by)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [uuidv4(), id, ticket.status, status, user.id]
+      const result = await client.query(
+        `UPDATE tickets SET title=$1, description=$2, priority=$3, category_id=$4, status=$5, updated_at=NOW()
+         WHERE id=$6 RETURNING *`,
+        [newTitle, newDesc, newPriority, newCategoryId, newStatus, id]
       );
-    }
 
-    res.json(result.rows[0]);
+      if (canUpdateStatus && status !== ticket.status) {
+        await client.query(
+          `INSERT INTO ticket_status_history (id, ticket_id, old_status, new_status, changed_by)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [uuidv4(), id, ticket.status, status, user.id]
+        );
+      }
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }
@@ -169,7 +219,7 @@ export async function deleteTicket(req: Request, res: Response, next: NextFuncti
     const user = req.user!;
     const { id } = req.params;
 
-    const current = await pool.query('SELECT * FROM tickets WHERE id=$1', [id]);
+    const current = await pool.query('SELECT id, user_id FROM tickets WHERE id=$1', [id]);
     if (current.rows.length === 0) {
       res.status(404).json({ error: 'Chamado não encontrado.' });
       return;
@@ -199,7 +249,7 @@ export async function updateTicketStatus(req: Request, res: Response, next: Next
       return;
     }
 
-    const current = await pool.query('SELECT * FROM tickets WHERE id=$1', [id]);
+    const current = await pool.query('SELECT id, status FROM tickets WHERE id=$1', [id]);
     if (current.rows.length === 0) {
       res.status(404).json({ error: 'Chamado não encontrado.' });
       return;
@@ -207,18 +257,29 @@ export async function updateTicketStatus(req: Request, res: Response, next: Next
 
     const oldStatus = current.rows[0].status;
 
-    const result = await pool.query(
-      `UPDATE tickets SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
-      [status, id]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    await pool.query(
-      `INSERT INTO ticket_status_history (id, ticket_id, old_status, new_status, changed_by)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [uuidv4(), id, oldStatus, status, user.id]
-    );
+      const result = await client.query(
+        `UPDATE tickets SET status=$1, updated_at=NOW() WHERE id=$2 RETURNING *`,
+        [status, id]
+      );
 
-    res.json(result.rows[0]);
+      await client.query(
+        `INSERT INTO ticket_status_history (id, ticket_id, old_status, new_status, changed_by)
+         VALUES ($1,$2,$3,$4,$5)`,
+        [uuidv4(), id, oldStatus, status, user.id]
+      );
+
+      await client.query('COMMIT');
+      res.json(result.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     next(err);
   }

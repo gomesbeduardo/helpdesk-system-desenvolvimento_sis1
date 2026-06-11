@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { AxiosError } from 'axios';
 import api from '../api/axios';
 import type { Category } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +13,7 @@ export default function CategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   function load() {
     api.get('/categories').then((r) => setCategories(r.data));
@@ -47,18 +49,22 @@ export default function CategoriesPage() {
       }
       load();
       cancelForm();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao salvar categoria.');
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao salvar categoria.');
     }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Excluir esta categoria?')) return;
+    setError('');
     try {
       await api.delete(`/categories/${id}`);
-      load();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir.');
+      setCategories(prev => prev.filter(c => c.id !== id));
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao excluir.');
+    } finally {
+      setPendingDelete(null);
     }
   }
 
@@ -71,10 +77,11 @@ export default function CategoriesPage() {
         )}
       </div>
 
+      {error && <div className="alert alert-error">{error}</div>}
+
       {showForm && isAdmin && (
         <div className="card">
           <h2>{editing ? 'Editar Categoria' : 'Nova Categoria'}</h2>
-          {error && <div className="alert alert-error">{error}</div>}
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>Nome *</label>
@@ -102,7 +109,16 @@ export default function CategoriesPage() {
             {isAdmin && (
               <div className="card-actions">
                 <button className="btn btn-sm btn-outline" onClick={() => startEdit(c)}>Editar</button>
-                <button className="btn btn-sm btn-danger" onClick={() => handleDelete(c.id)}>Excluir</button>
+                {pendingDelete === c.id ? (
+                  <span className="confirm-inline">
+                    Excluir?{' '}
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(c.id)}>Sim</button>
+                    {' '}
+                    <button className="btn btn-sm btn-outline" onClick={() => setPendingDelete(null)}>Não</button>
+                  </span>
+                ) : (
+                  <button className="btn btn-sm btn-danger" onClick={() => setPendingDelete(c.id)}>Excluir</button>
+                )}
               </div>
             )}
           </div>

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { AxiosError } from 'axios';
 import api from '../api/axios';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -20,10 +21,15 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api.post('/users', form);
-      await login(form.email, form.password);
-      navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao cadastrar.');
+      try {
+        await login(form.email, form.password);
+        navigate('/');
+      } catch {
+        navigate('/login?registered=1');
+      }
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao cadastrar.');
     } finally {
       setLoading(false);
     }
@@ -32,8 +38,11 @@ export default function RegisterPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>🎫 Help Desk</h1>
-        <h2>Criar conta</h2>
+        <div className="auth-logo">
+          <div className="auth-logo-icon">🎫</div>
+          <h1>Help Desk</h1>
+        </div>
+        <h2>Crie sua conta gratuita</h2>
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">

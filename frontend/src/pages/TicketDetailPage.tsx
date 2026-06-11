@@ -1,43 +1,27 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { AxiosError } from 'axios';
 import api from '../api/axios';
 import type { Ticket, Comment, HistoryEntry, TicketStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import EditTicketModal from '../components/EditTicketModal';
-
-const statusLabel: Record<TicketStatus, string> = {
-  open: 'Aberto',
-  in_progress: 'Em Atendimento',
-  resolved: 'Resolvido',
-  closed: 'Fechado',
-};
-
-const statusClass: Record<TicketStatus, string> = {
-  open: 'badge-blue',
-  in_progress: 'badge-yellow',
-  resolved: 'badge-green',
-  closed: 'badge-gray',
-};
-
-const priorityLabel: Record<string, string> = {
-  low: 'Baixa', medium: 'Média', high: 'Alta', urgent: 'Urgente',
-};
+import { statusLabel, statusClass, priorityLabel } from '../constants/ticket';
 
 export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [ticket, setTicket]       = useState<Ticket | null>(null);
-  const [comments, setComments]   = useState<Comment[]>([]);
-  const [history, setHistory]     = useState<HistoryEntry[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [newStatus, setNewStatus] = useState<TicketStatus>('open');
-  const [loading, setLoading]     = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError]         = useState('');
-  const [tab, setTab]             = useState<'comments' | 'history'>('comments');
-  const [showEdit, setShowEdit]   = useState(false);
+  const [ticket, setTicket]           = useState<Ticket | null>(null);
+  const [comments, setComments]       = useState<Comment[]>([]);
+  const [history, setHistory]         = useState<HistoryEntry[]>([]);
+  const [newComment, setNewComment]   = useState('');
+  const [newStatus, setNewStatus]     = useState<TicketStatus>('open');
+  const [loading, setLoading]         = useState(true);
+  const [submitting, setSubmitting]   = useState(false);
+  const [error, setError]             = useState('');
+  const [tab, setTab]                 = useState<'comments' | 'history'>('comments');
+  const [showEdit, setShowEdit]       = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -51,7 +35,7 @@ export default function TicketDetailPage() {
       setHistory(h.data);
     }).catch(() => navigate('/'))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, navigate]);
 
   async function handleComment(e: FormEvent) {
     e.preventDefault();
@@ -61,8 +45,9 @@ export default function TicketDetailPage() {
       const res = await api.post(`/tickets/${id}/comments`, { message: newComment });
       setComments(prev => [...prev, res.data]);
       setNewComment('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao comentar.');
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao comentar.');
     } finally {
       setSubmitting(false);
     }
@@ -70,20 +55,21 @@ export default function TicketDetailPage() {
 
   async function handleStatusChange() {
     if (!ticket || newStatus === ticket.status) return;
+    setError('');
     try {
       const res = await api.patch(`/tickets/${id}/status`, { status: newStatus });
       setTicket(prev => prev ? { ...prev, status: res.data.status } : prev);
       const h = await api.get(`/tickets/${id}/history`);
       setHistory(h.data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao alterar status.');
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao alterar status.');
     }
   }
 
   function handleSaved(updated: Ticket) {
     setTicket(updated);
     setNewStatus(updated.status);
-    // Refresh history in case status changed via admin edit
     api.get(`/tickets/${id}/history`).then(r => setHistory(r.data));
   }
 
@@ -92,10 +78,11 @@ export default function TicketDetailPage() {
 
   const canChangeStatus = user?.role === 'technician' || user?.role === 'admin';
   const isAdmin = user?.role === 'admin';
+  const isClosed = ticket.status === 'closed' || ticket.status === 'resolved';
 
   return (
     <div className="page">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)', marginBottom: 'var(--s4)' }}>
+      <div className="ticket-detail-actions">
         <button className="btn btn-sm btn-outline" onClick={() => navigate('/tickets')}>← Voltar</button>
         {isAdmin && (
           <button className="btn btn-sm btn-outline" onClick={() => setShowEdit(true)}>
@@ -166,17 +153,21 @@ export default function TicketDetailPage() {
               </div>
             ))}
           </div>
-          <form onSubmit={handleComment} className="comment-form">
-            <textarea
-              value={newComment}
-              onChange={e => setNewComment(e.target.value)}
-              placeholder="Escreva um comentário…"
-              required
-            />
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Enviando…' : 'Comentar'}
-            </button>
-          </form>
+          {isClosed ? (
+            <p className="empty-text">Chamado encerrado — comentários desabilitados.</p>
+          ) : (
+            <form onSubmit={handleComment} className="comment-form">
+              <textarea
+                value={newComment}
+                onChange={e => setNewComment(e.target.value)}
+                placeholder="Escreva um comentário…"
+                required
+              />
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {submitting ? 'Enviando…' : 'Comentar'}
+              </button>
+            </form>
+          )}
         </div>
       )}
 

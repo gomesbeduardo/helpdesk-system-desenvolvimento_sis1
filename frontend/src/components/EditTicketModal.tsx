@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { AxiosError } from 'axios';
 import api from '../api/axios';
 import type { Ticket, TicketStatus, TicketPriority, Category } from '../types';
 
@@ -10,6 +11,7 @@ interface Props {
 
 export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [form, setForm] = useState({
     title:       ticket.title,
     description: ticket.description,
@@ -21,10 +23,11 @@ export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
   const [error, setError]   = useState('');
 
   useEffect(() => {
-    api.get('/categories').then(r => setCategories(r.data));
+    api.get('/categories')
+      .then(r => setCategories(r.data))
+      .finally(() => setCategoriesLoading(false));
   }, []);
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -43,8 +46,9 @@ export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
       const res = await api.put(`/tickets/${ticket.id}`, form);
       onSaved(res.data);
       onClose();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao salvar chamado.');
+    } catch (err) {
+      const msg = err instanceof AxiosError ? err.response?.data?.error : undefined;
+      setError(msg || 'Erro ao salvar chamado.');
     } finally {
       setSaving(false);
     }
@@ -62,13 +66,13 @@ export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
             type="submit"
             form="edit-ticket-form"
             className="modal-save"
-            disabled={saving}
+            disabled={saving || categoriesLoading}
           >
             {saving ? 'Salvando…' : 'Salvar'}
           </button>
         </div>
 
-        {error && <div style={{ padding: '0 var(--s5)' }}><div className="alert alert-error">{error}</div></div>}
+        {error && <div className="modal-error"><div className="alert alert-error">{error}</div></div>}
 
         <form id="edit-ticket-form" onSubmit={handleSubmit} className="modal-body">
           <div className="form-section">
@@ -94,8 +98,8 @@ export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
             />
           </div>
 
-          <div className="form-row" style={{ marginBottom: 'var(--s5)' }}>
-            <div className="form-section" style={{ marginBottom: 0 }}>
+          <div className="form-row form-row--gap">
+            <div className="form-section form-section--no-mb">
               <label className="form-label">Prioridade</label>
               <select name="priority" value={form.priority} onChange={handleChange}>
                 <option value="low">🟢 Baixa</option>
@@ -105,7 +109,7 @@ export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
               </select>
             </div>
 
-            <div className="form-section" style={{ marginBottom: 0 }}>
+            <div className="form-section form-section--no-mb">
               <label className="form-label">Status</label>
               <select name="status" value={form.status} onChange={handleChange}>
                 <option value="open">Aberto</option>
@@ -118,11 +122,15 @@ export default function EditTicketModal({ ticket, onClose, onSaved }: Props) {
 
           <div className="form-section">
             <label className="form-label">Categoria</label>
-            <select name="category_id" value={form.category_id} onChange={handleChange} required>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            {categoriesLoading ? (
+              <p className="loading-text">Carregando categorias…</p>
+            ) : (
+              <select name="category_id" value={form.category_id} onChange={handleChange} required>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </form>
       </div>
