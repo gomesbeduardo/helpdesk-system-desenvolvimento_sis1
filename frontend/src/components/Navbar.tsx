@@ -30,14 +30,14 @@ export default function Navbar() {
         </div>
 
         <div className="navbar-links">
-          <Link to="/"           style={isActive('/tickets') || isActive('/categories') || isActive('/users') ? {} : { color: 'var(--label)' }}>Início</Link>
-          <Link to="/tickets"    style={isActive('/tickets')    ? { color: 'var(--blue)' } : {}}>Chamados</Link>
+          <Link to="/"           className={!isActive('/tickets') && !isActive('/categories') && !isActive('/users') ? 'nav-active' : ''}>Início</Link>
+          <Link to="/tickets"    className={isActive('/tickets')    ? 'nav-active' : ''}>Chamados</Link>
           <Link to="/tickets/new">Abrir Chamado</Link>
           {(user?.role === 'admin' || user?.role === 'technician') && (
-            <Link to="/categories" style={isActive('/categories') ? { color: 'var(--blue)' } : {}}>Categorias</Link>
+            <Link to="/categories" className={isActive('/categories') ? 'nav-active' : ''}>Categorias</Link>
           )}
           {user?.role === 'admin' && (
-            <Link to="/users" style={isActive('/users') ? { color: 'var(--blue)' } : {}}>Usuários</Link>
+            <Link to="/users" className={isActive('/users') ? 'nav-active' : ''}>Usuários</Link>
           )}
         </div>
 
